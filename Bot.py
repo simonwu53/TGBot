@@ -23,9 +23,19 @@ class BaseBot:
         LOG.add_log('Bot has been started.')
         return
 
-    """bot api"""
+    """commands registration"""
+    def register_commands(self, module_name, commands):
+        for command in commands:
+            self.register_command(module_name, command)
+        return
+
     def register_command(self, module_name, command):
         self.cmd_list[command] = module_name
+        return
+
+    def remove_commands(self, commands):
+        for command in commands:
+            self.remove_command(command)
         return
 
     def remove_command(self, command):
@@ -45,8 +55,12 @@ class BaseBot:
 
     def activate_module(self, module):
         mod = module.Module(self)
+        # initialize module
         mod.initialize()
+        # add module to module list
         self.record_module_entry(mod.name, mod)
+        # add module's commands
+        self.register_commands(mod.name, mod.commands)
         LOG.add_log("Module {} activated.".format(mod.name))
         return
 
@@ -54,9 +68,9 @@ class BaseBot:
         mod = self.modules[module_name]
         # stop module
         mod.on_stop()
-        # remove command
-        self.remove_command(mod.command)
-        # remove records
+        # remove module's commands
+        self.remove_commands(mod.commands)
+        # remove module from module list
         self.remove_module_entry(module_name)
         LOG.add_log("Module {} deactivated.".format(module_name))
         return

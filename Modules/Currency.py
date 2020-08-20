@@ -19,7 +19,7 @@ class Module(Base):
     def __init__(self, master):
         super(Module, self).__init__(master)
         self.name = "Currency"   # "name"
-        self.command = "/currency"   # "\command"
+        self.commands = ["/currency", ]   # "\command"
         self.LOG = Logger('./log', 'module-currency')
         return
 
@@ -28,13 +28,9 @@ class Module(Base):
         if not self.master.table_exists('currency'):
             self.master.execute_cmd(str_create_currency_table)
             self.LOG.add_log("Table initialized.")
-
-        # register commands
-        self.master.register_command(self.name, self.command)
-        self.LOG.add_log("Module {} registered.".format(self.name))
         return
 
-    def __call__(self):
+    def __call__(self, cmd):
 
         return
 
