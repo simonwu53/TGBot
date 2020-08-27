@@ -24,10 +24,15 @@ class DatabaseUtils:
         else:
             return 0
 
-    def execute_cmd(self, cmd):
-        self.cur.execute(cmd)
-        self.con.commit()
-        return
+    def execute_cmd(self, cmd, args=None):
+        flag = 0
+        try:
+            self.cur.execute(cmd, args)
+            self.con.commit()
+            flag = 1
+        except sqlite3.OperationalError as e:
+            LOG.add_log("DB failed to execute the command: %s" % cmd, 'ERROR')
+        return flag
 
     @staticmethod
     def connect_db(db=None):

@@ -1,10 +1,10 @@
-from .BaseModule import Module as Base
-from Log import Logger
+from .BaseModule import Base
+from typing import Optional
 
 
 # date format  ISO8601 strings "YYYY-MM-DD HH:MM:SS.SSS"
 str_create_currency_table = """
-    CREATE TABLE currency (
+    CREATE TABLE Currency (
         id integer PRIMARY KEY,
         label_ZH text NOT NULL,
         label_EN text NOT NULL,
@@ -20,23 +20,25 @@ class Module(Base):
         super(Module, self).__init__(master)
         self.name = "Currency"   # "name"
         self.commands = ["/currency", ]   # "\command"
-        self.LOG = Logger('./log', 'module-currency')
         return
 
     def initialize(self):
         # register resources
         if not self.master.table_exists('currency'):
-            self.master.execute_cmd(str_create_currency_table)
-            self.LOG.add_log("Table initialized.")
+            res = self.master.execute_cmd(str_create_currency_table)
+            if not res:
+                self.add_log("Initialization failed! Currency table not created in DB. Exit.", 'ERROR')
+                return
+            self.add_log("Currency table initialized.")
         return
 
-    def __call__(self, cmd):
-
-        return
+    def __call__(self, cmd: str, arg: Optional[str] = None) -> bool:
+        self.LOG.add_log("Received cmd: %s. arg: %s." % (cmd, arg))
+        return True
 
     def on_stop(self):
         # stop tasks
         # add here
-        self.LOG.add_log("Module {} stopped.".format(self.name))
+        self.add_log("Module {} stopped.".format(self.name))
         self.LOG.flush()
         return
