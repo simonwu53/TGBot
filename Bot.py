@@ -1,5 +1,7 @@
 import sys
-from time import sleep, time
+from time import time
+import os
+import signal
 import telepot
 from telepot.loop import MessageLoop
 from Database import DatabaseUtils
@@ -184,12 +186,13 @@ class BaseBot:
             self.add_user(sender)
             return
 
+        # termination
         if msg['text'].startswith('/terminate'):
             if arg == self.__stop_token:
                 LOG.info("Terminating bot...")
                 self.on_stop()
                 LOG.info("Bot has stopped.")
-                return
+            return
 
         # dispatch command to module
         LOG.info("Received command [%s] from %s(%d)." % (cmd, sender['username'], sender['id']))
@@ -199,7 +202,7 @@ class BaseBot:
             except Exception as e:
                 LOG.error("An error occurred while executing command[%s]!" % cmd)
                 LOG.error(e)
-        return
+            return
 
     """on stop"""
     def on_stop(self):
@@ -211,7 +214,7 @@ class BaseBot:
         # close db
         self.db.on_stop()
         LOG.flush()
-        return
+        os.kill(os.getpid(), signal.SIGTERM)
 
 
 if __name__ == '__main__':
