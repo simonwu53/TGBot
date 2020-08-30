@@ -24,12 +24,12 @@ class Module(Base):
 
     def initialize(self):
         # register resources
-        if not self.master.table_exists('currency'):
+        if not self.master.table_exists('Currency'):
             res = self.master.execute_cmd(str_create_currency_table)
             if not res:
-                self.add_log("Initialization failed! Currency table not created in DB. Exit.", 'ERROR')
+                self.log_error("Initialization failed! Currency table not created in DB. Exit.")
                 return
-            self.add_log("Currency table initialized.")
+            self.log_info("Currency table initialized.")
         return
 
     def __call__(self, cmd: str, arg: Optional[str] = None) -> bool:
@@ -39,6 +39,6 @@ class Module(Base):
     def on_stop(self):
         # stop tasks
         # add here
-        self.add_log("Module {} stopped.".format(self.name))
+        self.log_info("Module {} stopped.".format(self.name))
         self.LOG.flush()
         return

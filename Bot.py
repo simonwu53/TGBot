@@ -30,10 +30,13 @@ str_create_user_table = """
 
 
 class BaseBot:
-    def __init__(self, token, db='./app.db'):
+    def __init__(self, token, stop_token, db='./app.db', activate_all_modules=True, start_bot=True):
         # private attributes
         self.__cmd_list = {}
         self.__modules = {}
+        self.__token = token
+        self.__bot = None
+        self.__stop_token = stop_token
         # public params
         self.db = DatabaseUtils(db)
 
@@ -41,15 +44,19 @@ class BaseBot:
         if not self.db.table_exists("User"):
             res = self.db.execute_cmd(str_create_user_table)
             if not res:
-                LOG.add_log("Initialization failed! User table not created in DB. Exit.", 'ERROR')
+                LOG.error("Initialization failed! User table not created in DB. Exit.")
                 exit(0)
-            LOG.add_log("User table added.")
+            LOG.info("User table added.")
+
+        # activate modules
+        if activate_all_modules:
+            self.activate_all_modules()
 
         # start bot
-        LOG.add_log('Initializing Bot...')
-        self.__bot = telepot.Bot(token)
-        MessageLoop(self.__bot, self.message_handler).run_as_thread()
-        LOG.add_log('Bot has been started.')
+        if start_bot:
+            LOG.info('Bot has been started.')
+            self.__bot = telepot.Bot(self.__token)
+            MessageLoop(self.__bot, self.message_handler).run_forever()
         return
 
     """commands registration"""
@@ -70,9 +77,9 @@ class BaseBot:
     def remove_command(self, command):
         res = self.__cmd_list.pop(command, None)
         if res is not None:
-            LOG.add_log("Command {} removed.".format(command))
+            LOG.info("Command {} removed.".format(command))
         else:
-            LOG.add_log("Command {} can not be removed: Not found".format(command), mode='WARN')
+            LOG.warn("Command {} can not be removed: Not found".format(command))
         return
 
     """modules"""
@@ -90,7 +97,7 @@ class BaseBot:
         self.record_module_entry(mod.name, mod)
         # add module's commands
         self.register_commands(mod.name, mod.commands)
-        LOG.add_log("Module {} activated.".format(mod.name))
+        LOG.info("Module {} activated.".format(mod.name))
         return
 
     def deactivate_module(self, module_name):
@@ -101,43 +108,64 @@ class BaseBot:
         self.remove_commands(mod.commands)
         # remove module from module list
         self.remove_module_entry(module_name)
-        LOG.add_log("Module {} deactivated.".format(module_name))
+        LOG.info("Module {} deactivated.".format(module_name))
         return
 
     def record_module_entry(self, module_name, module):
         self.__modules[module_name] = module
-        LOG.add_log("Module {} recorded.".format(module_name))
+        LOG.info("Module {} recorded.".format(module_name))
         return
 
     def remove_module_entry(self, module_name):
         res = self.__modules.pop(module_name, None)
         if res is not None:
-            LOG.add_log("Module {} removed.".format(module_name))
+            LOG.info("Module {} removed.".format(module_name))
         else:
-            LOG.add_log("Module {} can not be removed: Not found".format(module_name), mode='WARN')
+            LOG.warn("Module {} can not be removed: Not found".format(module_name))
         return
 
     """db api"""
     def table_exists(self, table_name):
         return self.db.table_exists(table_name)
 
-    def execute_cmd(self, cmd, args=None):
-        res = self.db.execute_cmd(cmd, args)
+    def execute_cmd(self, cmd, args=None, fetch_res=False):
+        res = self.db.execute_cmd(cmd, args, fetch_res)
         return res
 
     """statistics"""
     def add_user(self, sender):
-        LOG.add_log("Adding user [%s](%d) to DB." % (sender['username'], sender['id']))
+        # query user before adding
+        query = "SELECT username, firstname, lastname FROM User WHERE id = ?"
+        if res := self.execute_cmd(query, (sender['id'],), fetch_res=True):
+            LOG.info("User [%s](%d) already registered in DB." % (sender['username'], sender['id']))
+            if len(res) > 1:
+                LOG.warn("More than one user found by id %d!!" % sender['id'])
+            update = \
+                """
+                UPDATE User 
+                SET username = ?, firstname = ?, lastname = ?, language = ?, timestamp = ? 
+                WHERE id = ?
+                """
+            if self.execute_cmd(update, (sender['username'], sender['first_name'], sender['last_name'],
+                                         sender['language_code'], int(time()), sender['id'])):
+                LOG.info("User status updated in DB.")
+            else:
+                LOG.error("User status not update in DB.")
+            return
+
+        # adding new user
+        LOG.info("Adding user [%s](%d) to DB." % (sender['username'], sender['id']))
         cmd = \
             """
             INSERT INTO User
             (id, username, firstname, lastname, language, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
             """
-        res = self.execute_cmd(cmd, (sender['id'], sender['username'], sender['first_name'], sender['last_time'],
-                                     sender['language_code'], int(time())))
-        if not res:
-            LOG.add_log("Failed to add user [%s](%d)" % (sender['username'], sender['id']), 'ERROR')
+        if self.execute_cmd(cmd, (sender['id'], sender['username'], sender['first_name'], sender['last_name'],
+                                  sender['language_code'], int(time()))):
+            LOG.info("New user added.")
+        else:
+            LOG.error("Failed to add user [%s](%d)" % (sender['username'], sender['id']))
         return
 
     """msg handler"""
@@ -152,20 +180,30 @@ class BaseBot:
 
         # welcome
         if msg['text'].startswith('/start'):
-            LOG.add_log("New user %s(%d) started using the bot!" % (sender['username'], sender['id']))
+            LOG.info("New user %s(%d) started using the bot!" % (sender['username'], sender['id']))
             self.add_user(sender)
             return
 
+        if msg['text'].startswith('/terminate'):
+            if arg == self.__stop_token:
+                LOG.info("Terminating bot...")
+                self.on_stop()
+                LOG.info("Bot has stopped.")
+                return
+
         # dispatch command to module
-        LOG.add_log("Received command [%s] from %s(%d)." % (cmd, sender['username'], sender['id']))
+        LOG.info("Received command [%s] from %s(%d)." % (cmd, sender['username'], sender['id']))
         if mod_name := self.__cmd_list.get(cmd, False):
-            res = self.__modules[mod_name](cmd, arg)
-            
+            try:
+                res = self.__modules[mod_name](cmd, arg)
+            except Exception as e:
+                LOG.error("An error occurred while executing command[%s]!" % cmd)
+                LOG.error(e)
         return
 
     """on stop"""
     def on_stop(self):
-        LOG.add_log("Stopping bot...")
+        LOG.info("Stopping bot...")
         # close all modules
         modules = list(self.__modules.keys())
         for module in modules:
@@ -177,11 +215,7 @@ class BaseBot:
 
 
 if __name__ == '__main__':
+    # create bot
     TOKEN = sys.argv[1]
-    bot = BaseBot(TOKEN)
-    bot.activate_all_modules()
-    try:
-        while True:
-            sleep(10)
-    except KeyboardInterrupt as e:
-        bot.on_stop()
+    STOPP = sys.argv[2]
+    bot = BaseBot(TOKEN, STOPP, activate_all_modules=True, start_bot=True)

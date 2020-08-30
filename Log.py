@@ -14,7 +14,7 @@ class Logger:
         # initialize
         if not os.path.exists(base_path):
             os.mkdir(base_path)
-            self.add_log('Log folder created at: %s' % base_path)
+            self.info('Log folder created at: %s' % base_path)
         return
 
     def __len__(self):
@@ -30,7 +30,7 @@ class Logger:
                          'Log level: %s' % self.log_level])
         return out
 
-    def add_log(self, msg, mode='INFO'):
+    def log(self, msg, mode='INFO'):
         if mode not in LOG_MODE:
             raise ValueError("Unknown log mode: %s!" % mode)
 
@@ -46,6 +46,18 @@ class Logger:
         # save log
         if len(self.cache) >= self.max_cache:
             self.flush()
+        return
+
+    def info(self, msg):
+        self.log(msg, mode='INFO')
+        return
+
+    def warn(self, msg):
+        self.log(msg, mode='WARN')
+        return
+
+    def error(self, msg):
+        self.log(msg, mode='ERROR')
         return
 
     def flush(self):

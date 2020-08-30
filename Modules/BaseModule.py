@@ -20,6 +20,14 @@ class Base:
     def on_stop(self):
         return
 
-    def add_log(self, msg, mode='INFO'):
-        self.LOG.add_log("[%s]: %s" % (self.name, msg), mode)
+    def log_info(self, msg):
+        self.LOG.info("[%s]: %s" % (self.name, msg))
+        return
+
+    def log_warn(self, msg):
+        self.LOG.warn("[%s]: %s" % (self.name, msg))
+        return
+
+    def log_error(self, msg):
+        self.LOG.error("[%s]: %s" % (self.name, msg))
         return
